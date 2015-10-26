@@ -1,9 +1,10 @@
 module crc
-  (input bit_in,
-   input 
-   input clk, rst_b,
-   output bit_out,
-   output out_remain);
+  (input logic bit_in,
+   input logic clk, rst_b,
+   input logic stream_begin, strea_done,
+   input logic stop_stream,
+   output logic bit_out,
+   output logic out_remain);
 
 	logic [2:0] count;
    always_ff @(posedge clk, negedge rst_b) begin
@@ -16,7 +17,7 @@ module crc
 	count <= 3'd4;
 	state <= Standby; 	
 	end
-	else begin
+	else if (~stop_stream)
 	remainder[0] <= in_flop[0];
 	remainder[1] <= in_flop[1];
 	remainder[2] <= in_flop[2];

@@ -1,66 +1,58 @@
-module bitstream
-  (input logic clk, rst_b,
-   input logic [7:0] pid,
-   input logic [6:0] addr,
-   input logic [3:0] endp,
-   input logic init,
-   input logic 	stop_stream,
-   output logic bit_out,
-   output logic NRZ_start,
-   output logic stream_begin,
-   output logic stream_done);
-
-   logic [5:0] count;
-   logic [7:0] npid;
-   logic [7:0] sync;	
-
-   assign npid = ~pid;
-   assign sync = 8'd10000000;
-
-   enum 	logic [0:0] {Hold = 1'd0, Send = 1'd1} state, nextState;
+module bitStream (clk, rst_L, encode, pid, addr, endp, halt_stream, out, NRZI_begin, stream_begin, stream_done);
    
-   always_ff @(posedge clk, negedge rst_b)
-     if (~rst_b) begin
-	state <= Hold;
-	count <= 0;
-     end
-     else if (~stop_stream) begin
-	nextState <= state;
-	count <= newCount;
-     end
+    input logic clk, rst_L, encode, halt_stream;
+    input logic [3:0] pid, endp;
+    input logic [6:0] addr;
+    output logic out, NRZI_begin, stream_begin, stream_done;
+
+    logic [6:0] count, size;
+    logic [3:0] npid;
+    logic [7:0] sync;
+    logic [26:0] packet;
+    
+
+    assign npid = ~pid;
+    assign sync = 8'b10000000;
+    assign size = 7'd27;
+
+    enum logic {STANDBY = 1'b0, SEND = 1'b1} state;
    
-   always_comb begin
-      nextstate = state;
-      stream_begin = 0;
-      stream_done = 0;
-      newCount = count;
-      NRZ_start = 0;
-      case(state)
-	Hold: if (init) begin
-	   newCount = 0;
-	   nextState = Send;
-	   NRZ_start = 1;
-	end
-	Send: begin
-	   newCount = count + 1;
-	   if (count < 6'd8) begin
-	   bit_out = sync[count];
-	   end
-	   else if (count < 6'd12) bit_out = pid[count - 6'd8];
-	   else if (count < 6'd16) bit_out = npid[count - 6'd12];
-	   else if (count < 6'd23) begin
-		if (count == 6'd16) stream_begin = 1;
-		bit_out = addr[count - 6'd16];
-	   end
-	   else if (count < 6'd27) begin
-		bit_out = endp[count - 6'd23];
-		if (count == 6'd26) begin 
-			stream_done = 1;
-			nextState = Hold;
-		end
-	   end
-	end
-      endcase
-   end
+    always_ff @(posedge clk, negedge rst_L) begin
+        if (~rst_L) begin
+            state = STANDBY;
+            count = 0;
+            NRZI_begin = 0;
+            stream_begin = 0;
+            stream_done = 0;
+        end
+        else if (~halt_stream) begin
+            case(state) 
+                STANDBY: begin
+                    stream_done <= 0;
+                    if (encode) begin
+                        NRZI_begin <= 1;
+                        state <= SEND;
+                        packet <= {endp, addr, pid, npid, sync};
+                    end
+                end
+                SEND: begin
+                    out <= packet[count]; 
+                    packet <= packet >> 1;
+                    count <= count + 1'b1;
+                    if(count == size - 1'b1) begin
+                        state <= STANDBY;
+                        stream_done <= 1;
+                    end
+                    else if (count <= 7'd7) begin
+                        stream_begin <= 1;
+                    end
+                    else begin
+                        stream_begin <= 0;
+                    end
+                end                
+            endcase
+        end
+    end
+    
    
-endmodule: bitstream
+endmodule: bitStream

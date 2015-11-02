@@ -1,5 +1,5 @@
 module CRC(in, clk, rst_L, stream_begin, stream_done, halt_stream, out, CRC_done);
-           
+    
     input logic in, clk, rst_L, stream_begin, stream_done, halt_stream;
     output logic out, CRC_done;
    

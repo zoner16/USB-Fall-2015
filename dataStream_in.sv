@@ -1,22 +1,42 @@
+/*Global Definitions*/
+
+/*Packet PIDs*/
 `define OUT   4'b0001
 `define IN    4'b1001
 `define DATA0 4'b0011
 `define ACK   4'b0010
 `define NAK   4'b1010
 
+/*Port States*/
 `define J   2'b10 
 `define K   2'b01 
 `define SE0 2'b00 
 
+/*CRC Definitions*/
 `define CRC5  16'h001F
 `define CRC16 16'hFFFF
 `define NONE  16'h0000
 
+/*Residue Definitions*/
 `define CRC5_residue  16'h000C
 `define CRC16_residue 16'h800D
 
+//nettype for debugging DO NOT INCLUDE IN SIMULATION
 `default_nettype none
 
+/******************************************************************************
+// dataStream_in
+//*****************************************************************************
+// clk              (input) - The clock
+// rst_L            (input) - Reset (asserted low)
+// kill             (input) - Kill switch for timeouts
+// decode           (input) - Start command to decode NRZI signals
+// port             (input) - Input from USB ports
+// pkt_out          (output)- Data packet out
+// done             (output)- Done indicating that packet is ready
+// NRZI_active      (output)- Activity flag controlling port lines
+// error            (output)- Error flag for CRC or EOP errors
+*/
 module dataStream_in (clk, rst_L, kill, decode, port, pkt_out, done, NRZI_active, error);
     
     input logic clk, rst_L, kill, decode;
@@ -73,7 +93,18 @@ module dataStream_in (clk, rst_L, kill, decode, port, pkt_out, done, NRZI_active
 
 endmodule: dataStream_in
 
-
+/******************************************************************************
+// NRZI_in
+//*****************************************************************************
+// clk              (input) - The clock
+// rst_L            (input) - Reset (asserted low)
+// kill             (input) - Kill switch for timeouts
+// decode           (input) - Start command to decode NRZI signals
+// in               (input) - Input from USB ports
+// out              (output)- Datastream out
+// EOP_error        (output)- Error in recieving EOP
+// NRZI_active      (output)- Activity flag controlling port lines
+*/
 module NRZI_in (clk, rst_L, kill, decode, in, out, EOP_error, NRZI_active);
     input logic clk, rst_L, kill, decode;
     input logic [1:0] in;
@@ -133,7 +164,18 @@ module NRZI_in (clk, rst_L, kill, decode, in, out, EOP_error, NRZI_active);
     
 endmodule: NRZI_in
 
-
+/******************************************************************************
+// bitUnstuff
+//*****************************************************************************
+// clk              (input) - The clock
+// rst_L            (input) - Reset (asserted low)
+// kill             (input) - Kill switch for timeouts
+// in               (input) - Input from datastream
+// data_begin       (input) - Signal from the packer that the stuffed data is inbound
+// data_done        (input) - Signal from the packer that the stuffed data is done
+// out              (output)- Datastream out
+// halt_stream      (output)- Signal to downstream modules to stop for unstuff
+*/
 module bitUnstuff (clk, rst_L, kill, in, data_begin, data_done, out, halt_stream);
     input logic clk, rst_L, kill, in, data_begin, data_done;
     output logic out, halt_stream;
@@ -188,7 +230,19 @@ module bitUnstuff (clk, rst_L, kill, in, data_begin, data_done, out, halt_stream
     
 endmodule: bitUnstuff
 
-
+/******************************************************************************
+// CRC_in
+//*****************************************************************************
+// clk              (input) - The clock
+// rst_L            (input) - Reset (asserted low)
+// kill             (input) - Kill switch for timeouts
+// in               (input) - Input from datastream
+// data_begin       (input) - Signal from the packer that the CRC'd data is inbound
+// halt_stream      (input) - Signal from unstuffer to stop for unstuff
+// data_done        (input) - Signal from the packer that the stuffed data is done
+// CRC_type         (input) - CRC type determined by packer upon recieving PID
+// out              (output)- Datastream out
+*/
 module CRC_in (clk, rst_L, kill, in, data_begin, halt_stream, data_done, CRC_type, out);
     input logic clk, rst_L, kill, in, data_begin, halt_stream, data_done; 
     input logic [15:0] CRC_type;
@@ -248,7 +302,22 @@ module CRC_in (clk, rst_L, kill, in, data_begin, halt_stream, data_done, CRC_typ
     
 endmodule: CRC_in
 
-
+/******************************************************************************
+// dataPack
+//*****************************************************************************
+// clk              (input) - The clock
+// rst_L            (input) - Reset (asserted low)
+// kill             (input) - Kill switch for timeouts
+// decode           (input) - Start command to decode NRZI signals
+// in               (input) - Input from datastream
+// halt_stream      (input) - Signal from unstuffer to stop for unstuff
+// error            (output)- Error flag for CRC or EOP errors
+// data_begin       (output)- Signal to upstream modules that data is beginning
+// data_done        (output)- Signal to upstream modules that data is done
+// stream_done      (output)- Done indicating that packet is ready
+// CRC_type         (output)- CRC type determined by packer upon recieving PID
+// pkt_out          (output)- Data packet out
+*/
 module dataPack (clk, rst_L, kill, decode, in, halt_stream, EOP_error, error, data_begin, data_done, stream_done, CRC_type, pkt_out);
     input logic clk, rst_L, kill, decode, in, halt_stream, EOP_error;
     output logic error, data_begin, data_done, stream_done;
@@ -307,11 +376,11 @@ module dataPack (clk, rst_L, kill, decode, in, halt_stream, EOP_error, error, da
                 PID: begin
                     pid[PID_count] <= in;
                     PID_count <= PID_count + 3'd1;
-                    if(PID_count == 3'd7 && CRC_type != `NONE) begin
+                    if(PID_count == 3'd7 && CRC_type == `NONE) begin
                         state <= SEND;
                         PID_count <= 0;
                     end
-                    else if(PID_count == 3'd7 && CRC_type == `NONE) begin
+                    else if(PID_count == 3'd7 && CRC_type != `NONE) begin
                         state <= PACK;
                         PID_count <= 0;
                         data_begin <= 1;

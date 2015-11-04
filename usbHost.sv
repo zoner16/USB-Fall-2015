@@ -24,7 +24,11 @@ typedef struct packed {
   logic [63:0] data;
 } pkt_t;
 
+interface usbWires;
+	tri0 DP;
+	tri0 DM;
 
+endinterface
 // Write your usb host here.  Do not modify the port list.
 
 module usbHost
@@ -91,7 +95,7 @@ module usbHost
                             .NRZI_active(NRZI_in_active),
                             .error(error));
 
-    
+    //assign wires to port pins
     assign wires.DP = (NRZI_out_active) ? port_out[1] : 1'bz;
     assign wires.DM = (NRZI_out_active) ? port_out[0] : 1'bz;
 

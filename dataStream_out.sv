@@ -17,6 +17,18 @@
 
 `default_nettype none
 
+
+/******************************************************************************
+// dataStream_out
+//*****************************************************************************
+// clk              (input) - The clock
+// rst_L            (input) - Reset (asserted low)
+// encode           (input) - Start command to encode NRZI signals
+// pkt_in           (input) - Data packet in
+// done             (output)- Done indicating that packet has been sent
+// NRZI_active      (output)- Activity flag controlling port lines
+// port             (output)- Input from USB ports
+*/
 module dataStream_out(clk, rst_L, encode, pkt_in, done, NRZI_active, port);
 
     input logic clk, rst_L, encode;
@@ -82,6 +94,23 @@ module dataStream_out(clk, rst_L, encode, pkt_in, done, NRZI_active, port);
 
 endmodule: dataStream_out
 
+/******************************************************************************
+// bitStream
+//*****************************************************************************
+// clk              (input) - The clock
+// rst_L            (input) - Reset (asserted low)
+// encode           (input) - Start command to encode NRZI signals
+// pid              (input) - PID fromt the packet
+// addr             (input) - Address from the packet
+// endp             (input) - Endpoint from the packet
+// data             (input) - Data from the packet
+// halt_stream      (input) - Signal from stuffer to pause for stuff
+// out              (output)- Datastream out
+// data_begin       (output)- Signal to downstream modules that data is beginning
+// stream_done      (output)- Done indicating that packet has been sent
+// jump_EOP         (output)- Signal to NRZI to jump directly to EOP without waiting for stuffer
+// CRC_type         (output)- Signal telling CRC what type to use based on PID
+*/
 module bitStream (clk, rst_L, encode, pid, addr, endp, data, halt_stream, out, data_begin, stream_done, jump_EOP, CRC_type);
    
     input logic clk, rst_L, encode, halt_stream;
@@ -179,6 +208,20 @@ module bitStream (clk, rst_L, encode, pid, addr, endp, data, halt_stream, out, d
     
 endmodule: bitStream
 
+
+/******************************************************************************
+// CRC
+//*****************************************************************************
+// clk              (input) - The clock
+// rst_L            (input) - Reset (asserted low)
+// in               (input) - Start command to encode NRZI signals
+// data_begin       (input) - Signal from bitstream that data is beginning
+// stream_done      (input) - Done indicating that packet has been sent
+// CRC_type         (input) - Signal telling CRC what type to use based on PID
+// halt_stream      (input) - Signal from stuffer to pause for stuff
+// out              (output)- Datastream out
+// CRC_done         (output)- Signal to stuffer that CRC has finished
+*/
 module CRC(clk, rst_L, in, data_begin, stream_done, CRC_type, halt_stream, out, CRC_done);
     
     input logic in, clk, rst_L, data_begin, stream_done, halt_stream;
@@ -297,6 +340,18 @@ module CRC(clk, rst_L, in, data_begin, stream_done, CRC_type, halt_stream, out, 
     
 endmodule: CRC
 
+/******************************************************************************
+// bitStuff
+//*****************************************************************************
+// clk              (input) - The clock
+// rst_L            (input) - Reset (asserted low)
+// in               (input) - Start command to encode NRZI signals
+// data_begin       (input) - Signal from bitstream that data is beginning
+// CRC_done         (input) - Done indicating that CRC has finished sending
+// out              (output)- Datastream out
+// stuff_done       (output)- Signal to NRZI to tell it to send EOP
+// halt_stream      (output)- Signal from stuffer to pause for stuff
+*/
 module bitStuff(clk, rst_L, in, data_begin, CRC_done, out, stuff_done, halt_stream);
     
     input logic clk, rst_L, in, data_begin, CRC_done;
@@ -371,9 +426,21 @@ module bitStuff(clk, rst_L, in, data_begin, CRC_done, out, stuff_done, halt_stre
         end
     end
 
-    
 endmodule: bitStuff
 
+/******************************************************************************
+// NRZI
+//*****************************************************************************
+// clk              (input) - The clock
+// rst_L            (input) - Reset (asserted low)
+// in               (input) - Start command to encode NRZI signals
+// out              (output)- Output connected directly to the ports
+// encode           (input) - Start command to encode NRZI signals
+// NRZI_active      (input) - Activity flag controlling port lines
+// NRZI_done        (output)- Flag indicating that NRZI has sent EOP
+// stuff_done       (output)- Signal from stuffer to tell it to send EOP
+// jump_EOP         (output)- Signal from bitStream to jump directly to EOP without waiting for stuffer
+*/
 module NRZI(clk, rst_L, in, out, encode, NRZI_active, NRZI_done, stuff_done, jump_EOP);
     input logic clk, rst_L, in, encode, stuff_done, jump_EOP;
     output logic NRZI_active, NRZI_done;

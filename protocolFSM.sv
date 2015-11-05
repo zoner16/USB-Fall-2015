@@ -1,8 +1,15 @@
+typedef struct packed {
+  logic [3:0] pid;
+  logic [3:0] endp;
+  logic [6:0] addr;
+  logic [63:0] data;
+} pkt_t;
+
 module protocolFSM
-  (input bit         clk, rst_b, in_trans, out_trans, pkt_sent, pkt_received, crc_correct, encode, decode,
+  (input bit         clk, rst_b, in_trans, out_trans, pkt_sent, pkt_received, crc_correct,
    input pkt_t       pkt_in,
    input bit [63:0]  data_from_host,
-   output bit 	     failure, success, kill,
+   output bit 	     failure, success, kill, encode, decode,
    output pkt_t      pkt_out,
    output bit [4:0]  crc_type,
    output bit [63:0] data_to_host);
@@ -10,7 +17,7 @@ module protocolFSM
    logic [7:0] 	    clk_count;
    logic [3:0] 	    timeout_count, corrupted_count;   
    
-   enum logic [2:0] {Hold= 3'd0, InTransWait= 3'd1, InTrans = 3'd2, OutTransWait = 2'd3, OutTransDataWait= 3'd4, OutTrans= 3'd5} state;
+   enum logic [2:0] {Hold= 3'd0, InTransWait= 3'd1, InTrans = 3'd2, OutTransWait = 3'd3, OutTransDataWait= 3'd4, OutTrans= 3'd5} state;
    
     always_ff @(posedge clk, negedge rst_b) begin
         if (~rst_b) begin

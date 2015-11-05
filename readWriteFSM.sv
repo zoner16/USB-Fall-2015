@@ -1,3 +1,10 @@
+typedef struct packed {
+  logic [3:0] pid;
+  logic [3:0] endp;
+  logic [6:0] addr;
+  logic [63:0] data;
+} pkt_t;
+
 module readWriteFSM
   (input bit         clk, rst_b, read, write, failure, success,
    input bit [15:0]  FSMmempage,

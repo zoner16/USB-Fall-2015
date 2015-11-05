@@ -24,11 +24,12 @@ typedef struct packed {
   logic [63:0] data;
 } pkt_t;
 
+/*
 interface usbWires;
 	tri0 DP;
 	tri0 DM;
-
 endinterface
+*/
 // Write your usb host here.  Do not modify the port list.
 
 module usbHost

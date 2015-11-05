@@ -34,13 +34,14 @@ module usbHost
 
     /* Tasks needed to be finished to run testbenches */
     
-    logic encode, decode, kill, error, in_done, out_done, NRZI_in_active, NRZI_out_active, failure, success;
-    logic isValueReadCorrect, read_write_FSM_done, in_trans, out_trans;
-    logic [1:0] port, port_in, port_out;
+    logic encode, decode, kill, error, in_done, out_done, NRZI_in_active, NRZI_out_active, failure, protocol_success;
+    logic isValueReadCorrect, read_done, write_done, in_trans, out_trans;
+    logic [1:0] port_in, port_out;
     bit read, write;
     bit [15:0] FSMmempage;
     bit [63:0] data_from_OS, data_to_OS, data_from_device, data_to_device;
     pkt_t pkt_in, pkt_out;
+    bit [3:0] endp;
 
     task prelabRequest();
     // sends an OUT packet with ADDR=5 and ENDP=4
@@ -65,13 +66,14 @@ module usbHost
     (input  bit [15:0] mempage, // Page to write
      output bit [63:0] data, // array of bytes to write
      output bit        success);
-
+       success <= 0;
        FSMmempage <= mempage;
        read <= 1;
-       wait (read_write_FSM_done);
+       wait (read_done);
        read <= 0;
        data <= data_to_OS;
        success <= isValueReadCorrect;
+       @(posedge clk);
        
     endtask: readData
 
@@ -82,12 +84,14 @@ module usbHost
      input  bit [63:0] data, // array of bytes to write
      output bit        success);
        
+       success <= 0;
        FSMmempage <= mempage;
        write <= 1;
        data_from_OS <= data;
-       wait (read_write_FSM_done);
+       wait (write_done);
        write <= 0;
        success <= isValueReadCorrect;
+       @(posedge clk);
        
     endtask: writeData
 
@@ -98,18 +102,21 @@ module usbHost
                            .read(read), 
                            .write(write), 
                            .failure(failure), 
-                           .success(success), 
+                           .success(protocol_success), 
                            .FSMmempage(FSMmempage), 
                            .data_from_OS(data_from_OS), 
                            .data_from_device(data_from_device), 
                            .data_to_device(data_to_device), 
-                           .data_to_OS(data_to_OS), 
+                           .data_to_OS(data_to_OS),
+                           .endp(endp), 
                            .in_trans(in_trans), 
                            .out_trans(out_trans), 
                            .isValueReadCorrect(isValueReadCorrect), 
-                           .read_write_FSM_done(read_write_FSM_done));
+                           .read_done(read_done),
+                           .write_done(write_done));
                            
-    protocolFSM protocol(.clk(clk), 
+    protocolFSM protocol(.clk(clk),
+                         .endp(endp),
                          .rst_b(rst_L), 
                          .in_trans(in_trans), 
                          .out_trans(out_trans), 
@@ -119,7 +126,7 @@ module usbHost
                          .pkt_in(pkt_out), 
                          .data_from_host(data_to_device), 
                          .failure(failure), 
-                         .success(success), 
+                         .success(protocol_success), 
                          .kill(kill), 
                          .encode(encode), 
                          .decode(decode), 
@@ -159,7 +166,8 @@ module readWriteFSM
    input bit [15:0]  FSMmempage,
    input bit [63:0]  data_from_OS, data_from_device,
    output bit [63:0] data_to_device, data_to_OS,
-   output bit        in_trans, out_trans, isValueReadCorrect, read_write_FSM_done);
+   output bit [3:0] endp,
+   output bit        in_trans, out_trans, isValueReadCorrect, read_done, write_done);
    
     enum logic [1:0] {Hold = 2'b00, Out = 2'b01, ReadIn = 2'b10, WriteOut = 2'b11} state;
    
@@ -168,7 +176,8 @@ module readWriteFSM
         if (~rst_b) begin
             state = Hold;
             isValueReadCorrect = 0;
-            read_write_FSM_done = 0;
+            read_done = 0;
+            write_done = 0;
             data_to_device = 0;
             in_trans = 0;
             out_trans = 0;
@@ -178,32 +187,43 @@ module readWriteFSM
             case(state)
                 Hold: begin
                     isValueReadCorrect <= 0;
-                    read_write_FSM_done <= 0;
+                    read_done <= 0;
+                    write_done <= 0;
+                    data_to_device <= 0;
+                    data_to_OS <= 0;
                     in_trans <= 0;
                     out_trans <= 0;
+                    endp <= 4'd0;
                     if (read || write) begin
                         state <= Out;
                         out_trans <= 1;
-                        data_to_device[15:0] <= FSMmempage;
+                        data_to_device[63:48] <= FSMmempage;
+                        endp <= 4'd4;
                     end
                 end
                 Out: begin // out transaction occurs for both read and write
                     out_trans <= 0;
-
                     if (success) begin
                         if (read) begin
                             state <= ReadIn;
                             in_trans <= 1;
+                            endp <= 4'd8;
                         end
                         else begin
                             state <= WriteOut;
                             out_trans <= 1;
+                            endp <= 4'd8;
                             data_to_device <= data_from_OS;
                         end
                     end
                     else if (failure) begin
                         state <= Hold;
-                        read_write_FSM_done <= 1;
+                        if(read) begin
+                            read_done <= 1;
+                        end
+                        else if(write) begin
+                            write_done <= 1;
+                        end
                         isValueReadCorrect <= 0;
                     end
                 end
@@ -211,13 +231,13 @@ module readWriteFSM
                     in_trans <= 0;
                     if (success) begin
                         state <= Hold;
-                        read_write_FSM_done <= 1;
+                        read_done <= 1;
                         isValueReadCorrect <= 1;
-		        data_to_OS <= data_from_device;
+                        data_to_OS <= data_from_device;
                     end
                     else if (failure) begin
                         state <= Hold;
-                        read_write_FSM_done <= 1;
+                        read_done <= 1;
                         isValueReadCorrect <= 0;
                     end
                 end // case: ReadIn
@@ -225,12 +245,12 @@ module readWriteFSM
                     out_trans <= 0;
                     if (success) begin
                         state <= Hold;
-                        read_write_FSM_done <= 1;
+                        write_done <= 1;
                         isValueReadCorrect <= 1;
                     end
                     else if (failure) begin
                         state <= Hold;
-                        read_write_FSM_done <= 1;
+                        write_done <= 1;
                         isValueReadCorrect <= 0;
                     end
                 end
@@ -244,10 +264,12 @@ module protocolFSM
   (input bit         clk, rst_b, in_trans, out_trans, pkt_sent, pkt_received, error,
    input pkt_t       pkt_in,
    input bit [63:0]  data_from_host,
+   input bit [3:0]   endp,
    output bit 	     failure, success, kill, encode, decode,
    output pkt_t      pkt_out,
    output bit [63:0] data_to_host);
 
+   logic            wait_ack;
    logic [7:0] 	    clk_count;
    logic [3:0] 	    timeout_count, corrupted_count;   
    
@@ -257,13 +279,13 @@ module protocolFSM
         if (~rst_b) begin
             state <= Hold;
             encode <= 0;
-            decode <= 0;
             kill <= 0;
             timeout_count <= 0;
             clk_count <= 0;
             failure <= 0;
             success <= 0;
             corrupted_count <= 0;
+            wait_ack = 0;
         end
         else begin
             case(state)
@@ -276,7 +298,7 @@ module protocolFSM
                     if (in_trans) begin 
                         pkt_out.pid <= 4'b1001;
                         pkt_out.addr <= 7'd5;
-                        pkt_out.endp <= 4'd4;
+                        pkt_out.endp <= endp;
                         encode <= 1;
                         kill <= 1;
 
@@ -285,7 +307,7 @@ module protocolFSM
                     else if (out_trans) begin
                         pkt_out.pid <= 4'b0001;
                         pkt_out.addr <= 7'd5;
-                        pkt_out.endp <= 4'd4;
+                        pkt_out.endp <= endp;
                         encode <= 1;
                         kill <= 1;
                         state <= OutTransWait;
@@ -297,16 +319,10 @@ module protocolFSM
                     kill <= 0;
                     if (pkt_sent) begin //datastream_out confirmed pckt sent
                         state <= InTrans;
-                        decode <= 1;
                     end
                 end
                 InTrans: begin
-                    decode <= 0;
-                    if (corrupted_count == 4'd8) begin // corrupted max reached
-                        state <= Hold;
-                        failure <= 1;
-                    end
-                    else if (timeout_count == 4'd8) begin // timeout max reached
+                    if ((corrupted_count + timeout_count) == 4'd8) begin // corrupted max reached
                         state <= Hold;
                         failure <= 1;
                     end
@@ -318,8 +334,7 @@ module protocolFSM
                         state <= InTransWait;
                     end
                     else if (pkt_received && ~error) begin //correct data sent to pFSM
-                        state <= Hold;
-                        success <= 1;
+                        wait_ack <= 1;
                         pkt_out.pid <= 4'b0010; //send ack
                         encode <= 1;
                         kill <= 1;
@@ -332,7 +347,16 @@ module protocolFSM
                         kill <= 1;
                         state <= InTransWait;
                     end
+                    else if(wait_ack && pkt_sent) begin
+                        state <= Hold;
+                        success <= 1;
+                        encode <= 0;
+                        kill <= 0;
+                        wait_ack <= 0;
+                    end
                     else begin
+                        encode <= 0;
+                        kill <= 0;
                         clk_count <= clk_count + 1'd1; //keep track of clk cycles
                     end
                 end // case: InTrans
@@ -353,16 +377,10 @@ module protocolFSM
                     kill <= 0;
                     if (pkt_sent) begin
                         state <= OutTrans;
-                        decode <= 1;
                     end
                 end
                 OutTrans: begin
-                    decode <= 0;
-                    if (corrupted_count == 4'd8) begin // corrupted max reached
-                        state <= Hold;
-                        failure <= 1;
-                    end
-                    else if (timeout_count == 4'd8) begin // timeout max reached
+                    if ((timeout_count + corrupted_count) == 4'd8) begin // corrupted max reached
                         state <= Hold;
                         failure <= 1;
                     end
@@ -393,6 +411,15 @@ module protocolFSM
                     end
                 end
            endcase
+        end
+    end
+
+    always_comb begin
+        if((state == InTransWait || state == OutTransDataWait) && pkt_sent) begin
+            decode = 1;
+        end
+        else begin
+            decode = 0;
         end
     end
 
@@ -526,6 +553,7 @@ module bitStream (clk, rst_L, encode, pid, addr, endp, data, halt_stream, out, d
                 STANDBY: begin //waiting for encode
                     jump_EOP <= 0; //reset jump_EOP signal
                     stream_done <= 0; //reset done signal
+                    count <= 0; //reset count
                     if (encode) begin
                         state <= SEND;
                     end
@@ -535,7 +563,6 @@ module bitStream (clk, rst_L, encode, pid, addr, endp, data, halt_stream, out, d
                     if(count == size - 2'd2) begin //reached end of packet
                         state <= STANDBY; 
                         stream_done <= 1; //set done flag
-                        count <= 0; //reset count
                         if(CRC_type == `NONE) begin //tell NRZI to proceed to EOP without flag from stuffer if no CRC
                             jump_EOP <= 1; 
                         end
@@ -830,8 +857,10 @@ module NRZI(clk, rst_L, in, out, encode, NRZI_active, NRZI_done, stuff_done, jum
                 SEND: begin
                     prev <= out; //set previous to current
                     if(stuff_done || jump_EOP) begin //head to EOP if stuffer is done or get the jump signal from the stream
-                        state <= EOP; 
-                        EOP_count <= 1; //count goes to 1
+                        state <= EOP;
+                        if(stuff_done) begin 
+                            EOP_count <= 1; //count goes to 1
+                        end
                     end
                 end
                 EOP: begin
@@ -851,10 +880,10 @@ module NRZI(clk, rst_L, in, out, encode, NRZI_active, NRZI_done, stuff_done, jum
     
     always_comb begin
         if(NRZI_active) begin //output logic 
-            if(stuff_done || jump_EOP) begin 
+            if(stuff_done) begin 
                 out = `SE0; //put first SE0 on the line when packet is done
             end
-            else if(state == EOP && EOP_count == 1) begin //put second SE0 on the line after that
+            else if(state == EOP && EOP_count != 2) begin //put second SE0 on the line after that
                 out = `SE0;
             end
             else if(state == EOP && EOP_count == 2) begin //put J on the line after both SE0
@@ -891,19 +920,21 @@ module dataStream_in (clk, rst_L, kill, decode, port, pkt_out, done, NRZI_active
     output pkt_t pkt_out;
     output logic done, NRZI_active, error;
     
-    logic NRZI_out, EOP_error, data_begin, data_done, unstuff_out, halt_stream, CRC_out, stream_done;
+    logic NRZI_out, EOP_error, data_begin, data_done, unstuff_out, halt_stream, CRC_out, stream_done, NRZI_done, CRC_error;
     logic [15:0] CRC_type;
     
-    assign done = stream_done; //link done signal
+    assign done = NRZI_done; //link done signal
     
     NRZI_in nrzi(.clk(clk), 
                  .rst_L(rst_L), 
                  .kill(kill),
                  .decode(decode), 
+                 .stream_done(stream_done),
                  .in(port), 
                  .out(NRZI_out), 
                  .EOP_error(EOP_error),
-                 .NRZI_active(NRZI_active));
+                 .NRZI_active(NRZI_active),
+                 .NRZI_done(NRZI_done));
                  
     bitUnstuff bitunstuff(.clk(clk), 
                           .rst_L(rst_L), 
@@ -922,7 +953,8 @@ module dataStream_in (clk, rst_L, kill, decode, port, pkt_out, done, NRZI_active
                .halt_stream(halt_stream), 
                .data_done(data_done), 
                .CRC_type(CRC_type), 
-               .out(CRC_out));
+               .out(CRC_out),
+               .CRC_error(CRC_error));
                
     dataPack datapack(.clk(clk), 
                       .rst_L(rst_L), 
@@ -930,11 +962,13 @@ module dataStream_in (clk, rst_L, kill, decode, port, pkt_out, done, NRZI_active
                       .decode(decode), 
                       .in(CRC_out), 
                       .halt_stream(halt_stream), 
-                      .EOP_error(EOP_error), 
+                      .EOP_error(EOP_error),
+                      .NRZI_done(NRZI_done),
                       .error(error), 
                       .data_begin(data_begin), 
                       .data_done(data_done), 
-                      .stream_done(stream_done), 
+                      .stream_done(stream_done),
+                      .CRC_error(CRC_error), 
                       .CRC_type(CRC_type), 
                       .pkt_out(pkt_out));
 
@@ -952,10 +986,10 @@ endmodule: dataStream_in
 // EOP_error        (output)- Error in recieving EOP
 // NRZI_active      (output)- Activity flag controlling port lines
 */
-module NRZI_in (clk, rst_L, kill, decode, in, out, EOP_error, NRZI_active);
-    input logic clk, rst_L, kill, decode;
+module NRZI_in (clk, rst_L, kill, decode, stream_done, in, out, EOP_error, NRZI_active, NRZI_done);
+    input logic clk, rst_L, kill, decode, stream_done;
     input logic [1:0] in;
-    output logic EOP_error, out, NRZI_active;
+    output logic EOP_error, out, NRZI_active, NRZI_done;
     
     logic [1:0] EOP_count, prev;
     
@@ -967,13 +1001,16 @@ module NRZI_in (clk, rst_L, kill, decode, in, out, EOP_error, NRZI_active);
             EOP_count = 0;
             EOP_error = 0;
             NRZI_active = 0;
+            NRZI_done = 0;
             state = STANDBY;
         end
         
         else begin
             case(state)
                 STANDBY: begin //standing by for decoding signal
+                    prev <= `J;
                     EOP_error <= 0;
+                    NRZI_done <= 0;
                     if(decode) begin
                         state <= SEND;
                         NRZI_active <= 1; //NRZI activated
@@ -981,15 +1018,12 @@ module NRZI_in (clk, rst_L, kill, decode, in, out, EOP_error, NRZI_active);
                 end
                 SEND: begin //sending 
                     prev <= in; //reset previous state
-                    if(in == `K) begin
-                        out <= (prev == `J) ? 1'b0 : 1'b1; //output logic for K
-                    end
-                    else if(in == `SE0) begin //spot EOP
+                    if(stream_done) begin //watch for EOP
                         state <= EOP;
                         EOP_count <= 2'd1;
-                    end
-                    else begin
-                        out <= (prev == `J) ? 1'b1 : 1'b0; //output logic for J
+                        if(in != `SE0) begin
+                            EOP_error <= 1;
+                        end
                     end
                 end
                 EOP: begin //EOP confirmation
@@ -999,6 +1033,7 @@ module NRZI_in (clk, rst_L, kill, decode, in, out, EOP_error, NRZI_active);
                     else if(EOP_count == 2 && in == `J) begin
                         EOP_count <= 2'd0;
                         state <= STANDBY;
+                        NRZI_done <= 1;
                         NRZI_active <= 0;
                     end
                     else begin
@@ -1013,6 +1048,18 @@ module NRZI_in (clk, rst_L, kill, decode, in, out, EOP_error, NRZI_active);
         
     end
     
+
+    always_comb begin
+        if(state == SEND)begin
+            if(in == `K) begin
+                out = (prev == `J) ? 1'b0 : 1'b1;
+            end
+            else begin
+                out = (prev == `J) ? 1'b1 : 1'b0;
+            end
+        end
+    end
+
 endmodule: NRZI_in
 
 /******************************************************************************
@@ -1094,10 +1141,10 @@ endmodule: bitUnstuff
 // CRC_type         (input) - CRC type determined by packer upon recieving PID
 // out              (output)- Datastream out
 */
-module CRC_in (clk, rst_L, kill, in, data_begin, halt_stream, data_done, CRC_type, out);
+module CRC_in (clk, rst_L, kill, in, data_begin, halt_stream, data_done, CRC_type, out, CRC_error);
     input logic clk, rst_L, kill, in, data_begin, halt_stream, data_done; 
     input logic [15:0] CRC_type;
-    output logic out;
+    output logic out, CRC_error;
 
     logic [15:0] in_flop;
     
@@ -1109,11 +1156,13 @@ module CRC_in (clk, rst_L, kill, in, data_begin, halt_stream, data_done, CRC_typ
         if(~rst_L | kill) begin //reset/kill state
             state = STANDBY;
             in_flop = 16'hFFFF;
+            CRC_error = 0;
         end
         
         else if (~halt_stream) begin //only calculate if stream not halted
             case(state)
                 STANDBY: begin //waiting for data to begin
+                    CRC_error <= 0;
                     if(data_begin) begin
                         state <= CRC;
                     end
@@ -1146,6 +1195,12 @@ module CRC_in (clk, rst_L, kill, in, data_begin, halt_stream, data_done, CRC_typ
                     end
                     if(data_done) begin
                         state <= STANDBY; //return to standby at the end of the data
+                        if(CRC_type == `CRC5 && in_flop[4:0] != `CRC5_residue) begin //throw error if CRC5 residue doesn't match
+                            CRC_error <= 1;
+                        end
+                        else if(CRC_type == `CRC16 && in_flop != `CRC16_residue) begin //throw error if CRC16 residue doesn't match
+                            CRC_error <= 1;
+                        end
                     end
                 end
             endcase
@@ -1170,8 +1225,8 @@ endmodule: CRC_in
 // CRC_type         (output)- CRC type determined by packer upon recieving PID
 // pkt_out          (output)- Data packet out
 */
-module dataPack (clk, rst_L, kill, decode, in, halt_stream, EOP_error, error, data_begin, data_done, stream_done, CRC_type, pkt_out);
-    input logic clk, rst_L, kill, decode, in, halt_stream, EOP_error;
+module dataPack (clk, rst_L, kill, decode, in, halt_stream, EOP_error, NRZI_done, error, data_begin, data_done, stream_done, CRC_error, CRC_type, pkt_out);
+    input logic clk, rst_L, kill, decode, in, halt_stream, EOP_error, NRZI_done, CRC_error;
     output logic error, data_begin, data_done, stream_done;
     output logic [15:0] CRC_type;
     output pkt_t pkt_out;
@@ -1181,7 +1236,6 @@ module dataPack (clk, rst_L, kill, decode, in, halt_stream, EOP_error, error, da
     logic [4:0] CRC_count, CRC_size;
     logic [7:0] pid, count, size; 
     logic [9:0] watch;
-    logic [15:0] residue;
     
     enum logic [2:0] {STANDBY = 3'b000, SYNC = 3'b001, PID = 3'b010, PACK = 3'b11, CRC = 3'b100, SEND = 3'b101} state; //state enumeration
     
@@ -1190,11 +1244,11 @@ module dataPack (clk, rst_L, kill, decode, in, halt_stream, EOP_error, error, da
             watch = 0;
             count = 0;
             pid = 0;
-            residue = 0;
             PID_count = 0;
             CRC_count = 0;
             error = 0;
             data_begin = 0;
+            data_done = 0;
             stream_done = 0;
             pkt_out = 0;
             state = STANDBY;
@@ -1211,7 +1265,6 @@ module dataPack (clk, rst_L, kill, decode, in, halt_stream, EOP_error, error, da
                     stream_done <= 0;
                     watch <= 0;
                     pid <= 0;
-                    residue <= 0;
                     if(decode) begin //begin decoding
                         state <= SYNC;
                     end
@@ -1235,6 +1288,7 @@ module dataPack (clk, rst_L, kill, decode, in, halt_stream, EOP_error, error, da
                         state <= SEND; //skip to SEND stage, no data
                         pkt_out.pid <= pid[3:0]; //put PID into packet
                         PID_count <= 0; //reset count
+                        stream_done <= 1; //put out done signal
                     end
                     else if(PID_count == 3'd7 && CRC_type != `NONE) begin
                         state <= PACK; //head to PACK state
@@ -1265,13 +1319,13 @@ module dataPack (clk, rst_L, kill, decode, in, halt_stream, EOP_error, error, da
                         count <= 0; //reset count
                     end
                 end
-                CRC: begin //record CRC residue
-                    residue[CRC_count] <= in; //put in in residue
+                CRC: begin
                     CRC_count <= CRC_count + 1'b1; //increment CRC_count
                     if(CRC_count == CRC_size - 1) begin
                         state <= SEND; //head to SEND
                         CRC_count <= 0; //reset CRC_count
                         data_done <= 1; //indicate to upstream that data is done 
+                        stream_done <= 1; //put out done signal
                     end
                 end
                 SEND: begin //send packet and error signals
@@ -1281,14 +1335,12 @@ module dataPack (clk, rst_L, kill, decode, in, halt_stream, EOP_error, error, da
                     else if(pid[3:0] != ~pid[7:4])begin //throw error if PID and NPID aren't complements
                         error <= 1;
                     end
-                    else if(CRC_type == `CRC5 && residue != `CRC5_residue) begin //throw error if CRC5 residue doesn't match
+                    else if(CRC_error) begin
                         error <= 1;
                     end
-                    else if(CRC_type == `CRC16 && residue != `CRC16_residue) begin //throw error if CRC16 residue doesn't match
-                        error <= 1;
+                    if(NRZI_done) begin
+                        state <= STANDBY; //return to standby
                     end
-                    stream_done <= 1; //put out done signal
-                    state <= STANDBY; //return to standby
                 end
             endcase
         end

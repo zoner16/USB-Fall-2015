@@ -65,6 +65,13 @@ module usbHost
      output bit [63:0] data, // array of bytes to write
      output bit        success);
 
+       FSMmempage <= mempage;
+       read <= 1;
+       wait (read_write_FSM_done);
+       read <= 0;
+       data <= data_to_OS;
+       success <= isValueReadCorrect;
+       
     endtask: readData
 
     task writeData
@@ -73,7 +80,14 @@ module usbHost
     (input  bit [15:0] mempage, // Page to write
      input  bit [63:0] data, // array of bytes to write
      output bit        success);
-
+       
+       FSMmempage <= mempage;
+       write <= 1;
+       data_to_OS <= data;
+       wait (read_write_FSM_done);
+       write <= 0;
+       success <= isValueReadCorrect;
+       
     endtask: writeData
 
     // usbHost starts here!!

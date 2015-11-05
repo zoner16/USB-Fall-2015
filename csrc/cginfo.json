@@ -1,0 +1,50 @@
+{
+    "NameTable": {
+        "std": [
+            "std",
+            "reYIK",
+            "module"
+        ],
+        "readWriteFSM": [
+            "readWriteFSM",
+            "gGuhv",
+            "module"
+        ],
+        "...MASTER...": [
+            "SIM",
+            "amcQw",
+            "module"
+        ]
+    },
+    "CompileStrategy": "fullobj",
+    "CurCompileModules": [
+        "...MASTER...",
+        "std",
+        "readWriteFSM"
+    ],
+    "CurCompileUdps": {},
+    "SIMBData": {
+        "out": "amcQwB.o",
+        "bytes": 58076
+    },
+    "LVLData": [
+        "SIM"
+    ],
+    "PEModules": [],
+    "CompileProcesses": [
+        "cgproc.2370598.json"
+    ],
+    "Misc": {
+        "cwd": "/afs/ece.cmu.edu/usr/samugoth/Private/ece341/USB-Fall-2015",
+        "csrc": "csrc",
+        "csrc_abs": "/afs/ece.cmu.edu/usr/samugoth/Private/ece341/USB-Fall-2015/csrc",
+        "default_output_dir": "csrc",
+        "daidir": "simv.daidir",
+        "daidir_abs": "/afs/ece.cmu.edu/usr/samugoth/Private/ece341/USB-Fall-2015/simv.daidir",
+        "archive_dir": "archive.0"
+    },
+    "stat": {
+        "nMops": 899
+    },
+    "CompileStatus": "Successful"
+}

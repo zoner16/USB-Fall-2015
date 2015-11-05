@@ -22,7 +22,15 @@
 `define CRC16_residue 16'h800D
 
 //nettype for debugging DO NOT INCLUDE IN SIMULATION
-`default_nettype none
+//`default_nettype none
+
+
+typedef struct packed {
+  logic [3:0] pid;
+  logic [3:0] endp;
+  logic [6:0] addr;
+  logic [63:0] data;
+} pkt_t;
 
 /******************************************************************************
 // dataStream_in
@@ -47,7 +55,7 @@ module dataStream_in (clk, rst_L, kill, decode, port, pkt_out, done, NRZI_active
     logic NRZI_out, EOP_error, data_begin, data_done, unstuff_out, halt_stream, CRC_out, stream_done;
     logic [15:0] CRC_type;
     
-    assign done = stream_done;
+    assign done = stream_done; //link done signal
     
     NRZI_in nrzi(.clk(clk), 
                  .rst_L(rst_L), 
@@ -112,36 +120,37 @@ module NRZI_in (clk, rst_L, kill, decode, in, out, EOP_error, NRZI_active);
     
     logic [1:0] EOP_count, prev;
     
-    enum logic [1:0] {STANDBY = 2'b00, SEND = 2'b01, EOP = 2'b10} state;
+    enum logic [1:0] {STANDBY = 2'b00, SEND = 2'b01, EOP = 2'b10} state; //state enumeration
     
-    always_ff @(posedge clk, negedge rst_L, negedge kill) begin
-        if(~rst_L | ~kill) begin
+    always_ff @(posedge clk, negedge rst_L, posedge kill) begin
+        if(~rst_L | kill) begin //reset/kill state
             prev = `J;
             EOP_count = 0;
             EOP_error = 0;
             NRZI_active = 0;
             state = STANDBY;
         end
+        
         else begin
             case(state)
-                STANDBY: begin
+                STANDBY: begin //standing by for decoding signal
                     EOP_error <= 0;
                     if(decode) begin
                         state <= SEND;
-                        NRZI_active <= 1;
+                        NRZI_active <= 1; //NRZI activated
                     end
                 end
-                SEND: begin
-                    prev <= in;
+                SEND: begin //sending 
+                    prev <= in; //reset previous state
                     if(in == `K) begin
-                        out <= (prev == `J) ? 1'b0 : 1'b1;
+                        out <= (prev == `J) ? 1'b0 : 1'b1; //output logic
                     end
-                    else if(in == `SE0) begin
+                    else if(in == `SE0) begin //spot EOP
                         state <= EOP;
                         EOP_count <= 2'd1;
                     end
                 end
-                EOP: begin
+                EOP: begin //EOP confirmation
                     if(EOP_count == 1 && in == `SE0) begin
                         EOP_count <= 2'd2;
                     end
@@ -151,7 +160,7 @@ module NRZI_in (clk, rst_L, kill, decode, in, out, EOP_error, NRZI_active);
                         NRZI_active <= 0;
                     end
                     else begin
-                        EOP_error <= 1;
+                        EOP_error <= 1; //flag incorrect EOP
                         EOP_count <= 2'd0;
                         state <= STANDBY;
                         NRZI_active <= 0;
@@ -181,43 +190,43 @@ module bitUnstuff (clk, rst_L, kill, in, data_begin, data_done, out, halt_stream
     output logic out, halt_stream;
     
     logic [2:0] count;
-    enum logic [1:0] {STANDBY = 2'b00, SEND = 2'b01, UNSTUFF = 2'b10} state;
+    enum logic [1:0] {STANDBY = 2'b00, SEND = 2'b01, UNSTUFF = 2'b10} state; //state enumeration
     
-    assign out = in;
+    assign out = in; //direct in to out
     
-    always_ff @(posedge clk, negedge rst_L, negedge kill) begin
-        if(~rst_L | ~kill) begin
+    always_ff @(posedge clk, negedge rst_L, posedge kill) begin
+        if(~rst_L | kill) begin //reset/kill state
             halt_stream = 0;
             count = 0;
             state = STANDBY;
         end
+        
         else begin
             case(state)
-                STANDBY: begin
+                STANDBY: begin //waiting for data to start
                     if(data_begin) begin
                         state <= SEND;
                     end
                 end
-                SEND: begin
-                    if(in) begin
-                        count <= count + 3'd1;
-                    end
-                    else begin
-                        count <= 0;
-                    end
-                    
-                    if(data_done) begin
+                SEND: begin //waiting for stuffed bit
+                    if(data_done) begin //return to standby at the end of the stream
                         state <= STANDBY;
                     end
-                    else if (count == 3'd5 && in == 1) begin
+                    else if (count == 3'd5 && in == 1) begin //unstuff once six ones are seen
                         state <= UNSTUFF;
+                        halt_stream <= 1; //halt stream operations
                         count <= 0;
-                        halt_stream <= 1;
-                    end                
+                    end   
+                    else if(in) begin
+                        count <= count + 3'd1;//increment count
+                    end
+                    else begin
+                        count <= 0;//reset count on 1
+                    end                    
                 end
-                UNSTUFF: begin
-                    halt_stream <= 0;
-                    if(data_done) begin
+                UNSTUFF: begin //unstuff state 
+                    halt_stream <= 0; //reset the halted stream
+                    if(data_done) begin //go to standby on data_done
                         state <= STANDBY;
                     end
                     else begin
@@ -250,30 +259,32 @@ module CRC_in (clk, rst_L, kill, in, data_begin, halt_stream, data_done, CRC_typ
 
     logic [15:0] in_flop;
     
-    enum logic [1:0] {STANDBY = 2'b00, CRC = 2'b01} state;
+    enum logic [1:0] {STANDBY = 2'b00, CRC = 2'b01} state; //state enumeration
     
-    assign out = in;
+    assign out = in; //direct in to out
     
-    always_ff @(posedge clk, negedge rst_L, negedge kill) begin
-        if(~rst_L | ~kill) begin
+    always_ff @(posedge clk, negedge rst_L, posedge kill) begin
+        if(~rst_L | kill) begin //reset/kill state
             state = STANDBY;
+            in_flop = 16'hFFFF;
         end
-        else if (~halt_stream) begin
+        
+        else if (~halt_stream) begin //only calculate if stream not halted
             case(state)
-                STANDBY: begin
+                STANDBY: begin //waiting for data to begin
                     if(data_begin) begin
                         state <= CRC;
                     end
                 end
                 CRC: begin
-                    if(CRC_type == `CRC5) begin
+                    if(CRC_type == `CRC5) begin //CRC5 calculation
                         in_flop[0] <= in_flop[4] ^ in;
                         in_flop[1] <= in_flop[0];
                         in_flop[2] <= in_flop[1] ^ (in_flop[4] ^ in);
                         in_flop[3] <= in_flop[2];
                         in_flop[4] <= in_flop[3];
                     end
-                    else if(CRC_type == `CRC16) begin
+                    else if(CRC_type == `CRC16) begin //CRC16 calculation
                         in_flop[0] <= in_flop[15] ^ in;
                         in_flop[1] <= in_flop[0];
                         in_flop[2] <= in_flop[1] ^ (in_flop[15] ^ in);
@@ -293,7 +304,7 @@ module CRC_in (clk, rst_L, kill, in, data_begin, halt_stream, data_done, CRC_typ
                     end
                     
                     if(data_done) begin
-                        state <= STANDBY;
+                        state <= STANDBY; //return to standby at the end of the data
                     end
                 end
             endcase
@@ -331,10 +342,10 @@ module dataPack (clk, rst_L, kill, decode, in, halt_stream, EOP_error, error, da
     logic [9:0] watch;
     logic [15:0] residue;
     
-    enum logic [2:0] {STANDBY = 3'b000, SYNC = 3'b001, PID = 3'b010, PACK = 3'b11, CRC = 3'b100, SEND = 3'b101} state;
+    enum logic [2:0] {STANDBY = 3'b000, SYNC = 3'b001, PID = 3'b010, PACK = 3'b11, CRC = 3'b100, SEND = 3'b101} state; //state enumeration
     
-    always_ff @(posedge clk, negedge rst_L, negedge kill) begin
-        if(~rst_L | ~kill) begin
+    always_ff @(posedge clk, negedge rst_L, posedge kill) begin
+        if(~rst_L | kill) begin //reset/kill state
             watch = 0;
             count = 0;
             pid = 0;
@@ -347,74 +358,96 @@ module dataPack (clk, rst_L, kill, decode, in, halt_stream, EOP_error, error, da
             pkt_out = 0;
             state = STANDBY;
         end
-        else if (~halt_stream) begin
-            if(EOP_error) begin
+        
+        else if (~halt_stream) begin //only process stream if not halted
+            if(EOP_error) begin //set error flag if EOP error reported from NRZI
                 error <= 1;
             end
             case(state)
-                STANDBY: begin
+                STANDBY: begin //waiting for decode signal
+                    pkt_out <= 0;
                     error <= 0;
                     stream_done <= 0;
                     watch <= 0;
                     pid <= 0;
                     residue <= 0;
-                    if(decode) begin
+                    if(decode) begin //begin decoding
                         state <= SYNC;
                     end
                 end
-                SYNC: begin
-                    if(watch >= 10'd7 && in)begin
-                        state <= PID;
+                SYNC: begin //watch for SYNC
+                    if(watch >= 10'd7 && in)begin //watch for seven 0s and a 1
+                        state <= PID; //head to PID state
+                        watch <= 0;
                     end
-                    else if(~in) begin
+                    else if(~in) begin //increment watch on 0
                         watch <= watch + 10'd1;
                     end
-                    else begin
+                    else begin //reset watch on 1
                         watch <= 0;
                     end
                 end
-                PID: begin
-                    pid[PID_count] <= in;
-                    PID_count <= PID_count + 3'd1;
-                    if(PID_count == 3'd7 && CRC_type == `NONE) begin
-                        state <= SEND;
-                        PID_count <= 0;
+                PID: begin //Pack PID
+                    pid[PID_count] <= in; //fill PID with in 
+                    PID_count <= PID_count + 3'd1; //increment PID counter
+                    if(PID_count == 3'd7 && CRC_type == `NONE) begin //if no CRC (ACK/NAK)
+                        state <= SEND; //skip to SEND stage, no data
+                        pkt_out.pid <= pid[3:0]; //put PID into packet
+                        PID_count <= 0; //reset count
                     end
                     else if(PID_count == 3'd7 && CRC_type != `NONE) begin
-                        state <= PACK;
-                        PID_count <= 0;
-                        data_begin <= 1;
+                        state <= PACK; //head to PACK state
+                        pkt_out.pid <= pid[3:0]; //put PID into packet
+                        data_begin <= 0; //reset data_begin signal
+                        PID_count <= 0; //reset count
+                    end
+                    else if(PID_count == 3'd6 && CRC_type != `NONE) begin
+                        data_begin <= 1; //indicate that data is beginning
                     end
                 end
-                PACK: begin
-                    data_begin <= 0;
-                    pkt_out[count] <= in;
-                    count <= count + 7'd1;
+                PACK: begin //PACK addr/endp/data
+                    data_begin <= 0; //reset data flag
+                    if(CRC_type == `CRC5) begin //if CRC5
+                        if(count <= 7'd7) begin //addr stage
+                            pkt_out.addr[count] <= in;
+                        end
+                        else begin //endp stage
+                            pkt_out.endp[count-7'd8] <= in;
+                        end
+                    end
+                    else if(CRC_type == `CRC16) begin //if CRC16
+                        pkt_out.data[count] <= in; //add in to data
+                    end
+                    count <= count + 7'd1; //increment count
                     if(count == size - 1'd1) begin
-                        state <= CRC;
-                        count <= 0;
+                        state <= CRC; //head to CRC stage
+                        count <= 0; //reset count
                     end
                 end
-                CRC: begin
-                    residue[CRC_count] <= in;
+                CRC: begin //record CRC residue
+                    residue[CRC_count] <= in; //put in in residue
+                    CRC_count <= CRC_count + 1'b1; //increment CRC_count
                     if(CRC_count == CRC_size - 1) begin
-                        state <= SEND;
-                        CRC_count <= 0;
-                        data_done <= 1;
+                        state <= SEND; //head to SEND
+                        CRC_count <= 0; //reset CRC_count
+                        data_done <= 1; //indicate to upstream that data is done 
                     end
                 end
-                SEND: begin
-                    if(PID_error) begin
+                SEND: begin //send packet and error signals
+                    if(PID_error) begin //throw error if unrecognized PID
                         error <= 1;
                     end
-                    else if(CRC_type == `CRC5 && residue != `CRC5_residue) begin
+                    else if(pid[3:0] != ~pid[7:4])begin //throw error if PID and NPID aren't complements
                         error <= 1;
                     end
-                    else if(CRC_type == `CRC16 && residue != `CRC16_residue) begin
+                    else if(CRC_type == `CRC5 && residue != `CRC5_residue) begin //throw error if CRC5 residue doesn't match
                         error <= 1;
                     end
-                    stream_done <= 1;
-                    state <= STANDBY;
+                    else if(CRC_type == `CRC16 && residue != `CRC16_residue) begin //throw error if CRC16 residue doesn't match
+                        error <= 1;
+                    end
+                    stream_done <= 1; //put out done signal
+                    state <= STANDBY; //return to standby
                 end
             endcase
         end

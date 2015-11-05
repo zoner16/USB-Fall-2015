@@ -42,8 +42,8 @@ module protocolFSM
                         pkt_out.pid <= 4'b1001;
                         pkt_out.addr <= 7'd5;
                         pkt_out.endp <= 4'd4;
-		        encode <= 1;
-		        kill <= 1;
+                        encode <= 1;
+                        kill <= 1;
 
                         state <= InTransWait;
                     end
@@ -51,8 +51,8 @@ module protocolFSM
                         pkt_out.pid <= 4'b0001;
                         pkt_out.addr <= 7'd5;
                         pkt_out.endp <= 4'd4;
-		        encode <= 1;
-		        kill <= 1;
+                        encode <= 1;
+                        kill <= 1;
                         state <= OutTransWait;
                     end
                 end // case: Hold
@@ -101,17 +101,17 @@ module protocolFSM
                         clk_count <= clk_count + 1'd1; //keep track of clk cycles
                     end
                 end // case: InTrans
-	        OutTransWait: begin //wait for datastream to confirm out pkt sent
-		   encode <= 0;
-		   kill <= 0;
-		   if (pkt_sent) begin
-		      state <= OutTransDataWait;
-		      pkt_out.pid <= 4'b0011; //send data
-                      pkt_out.data <= data_from_host;
-		      encode <= 1;
-		      kill <= 1;
-		   end
-		end
+                OutTransWait: begin //wait for datastream to confirm out pkt sent
+                    encode <= 0;
+                    kill <= 0;
+                    if (pkt_sent) begin
+                        state <= OutTransDataWait;
+                        pkt_out.pid <= 4'b0011; //send data
+                        pkt_out.data <= data_from_host;
+                        encode <= 1;
+                        kill <= 1;
+                   end
+                end
                 OutTransDataWait: begin //wait for datastream to confirm data pkt sent
                     clk_count <= 0;
                     encode <= 0;
@@ -132,13 +132,13 @@ module protocolFSM
                         failure <= 1;
                     end
                     else if (pkt_received && pkt_in.pid == 4'b1010) begin
-                         // received nak so resend data
-		       state <= OutTransDataWait;
-		       pkt_out.pid <= 4'b0011;
-                       pkt_out.data <= data_from_host;
-		       encode <= 1;
-		       kill <= 1;
-                       corrupted_count <= corrupted_count + 1'd1;
+                        // received nak so resend data
+                        state <= OutTransDataWait;
+                        pkt_out.pid <= 4'b0011;
+                        pkt_out.data <= data_from_host;
+                        encode <= 1;
+                        kill <= 1;
+                        corrupted_count <= corrupted_count + 1'd1;
 
                     end
                     else if (pkt_received && pkt_in.pid == 4'b0010) begin //received ack
@@ -150,8 +150,8 @@ module protocolFSM
                         state <= OutTransDataWait;
                         pkt_out.pid <= 4'b0011;
                         pkt_out.data <= data_from_host;
-		        encode <= 1;
-		        kill <= 1;
+                        encode <= 1;
+                        kill <= 1;
                     end
                     else begin
                         clk_count <= clk_count + 1'd1; //keep track of clk cycles

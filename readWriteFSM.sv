@@ -20,10 +20,10 @@ module readWriteFSM
             state = Hold;
             isValueReadCorrect = 0;
             read_write_FSM_done = 0;
-	    data_to_device = 0;
+            data_to_device = 0;
             in_trans = 0;
             out_trans = 0;
-	    data_to_OS = 0;
+            data_to_OS = 0;
         end
         else begin
             case(state)
@@ -33,13 +33,13 @@ module readWriteFSM
                     in_trans <= 0;
                     out_trans <= 0;
                     if (read || write) begin
-                       state <= Out;
-		       out_trans <= 1;
-                       data_to_device[15:0] <= FSMmempage;
+                        state <= Out;
+                        out_trans <= 1;
+                        data_to_device[15:0] <= FSMmempage;
                     end
                 end
                 Out: begin // out transaction occurs for both read and write
-		    out_trans <= 0;
+                    out_trans <= 0;
 
                     if (success) begin
                         if (read) begin

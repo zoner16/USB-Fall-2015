@@ -1,19 +1,26 @@
+/*Global Definitions*/
+
+/*Packet PIDs*/
 `define OUT   4'b0001
 `define IN    4'b1001
 `define DATA0 4'b0011
 `define ACK   4'b0010
 `define NAK   4'b1010
 
-`define SYNC  8'b10000000
-
+/*Port States*/
 `define J   2'b10 
 `define K   2'b01 
 `define SE0 2'b00 
 
+/*SYNC*/
+`define SYNC 8'b10000000
+
+/*CRC Definitions*/
 `define CRC5  16'h001F
 `define CRC16 16'hFFFF
 `define NONE  16'h0000
 
+/*Residue Definitions*/
 `define CRC5_residue  16'h000C
 `define CRC16_residue 16'h800D
 

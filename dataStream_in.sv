@@ -12,6 +12,9 @@
 `define K   2'b01 
 `define SE0 2'b00 
 
+/*SYNC*/
+`define SYNC 8'b10000000
+
 /*CRC Definitions*/
 `define CRC5  16'h001F
 `define CRC16 16'hFFFF
@@ -143,11 +146,14 @@ module NRZI_in (clk, rst_L, kill, decode, in, out, EOP_error, NRZI_active);
                 SEND: begin //sending 
                     prev <= in; //reset previous state
                     if(in == `K) begin
-                        out <= (prev == `J) ? 1'b0 : 1'b1; //output logic
+                        out <= (prev == `J) ? 1'b0 : 1'b1; //output logic for K
                     end
                     else if(in == `SE0) begin //spot EOP
                         state <= EOP;
                         EOP_count <= 2'd1;
+                    end
+                    else begin
+                        out <= (prev == `J) ? 1'b1 : 1'b0; //output logic for J
                     end
                 end
                 EOP: begin //EOP confirmation
@@ -302,7 +308,6 @@ module CRC_in (clk, rst_L, kill, in, data_begin, halt_stream, data_done, CRC_typ
                         in_flop[14] <= in_flop[13];
                         in_flop[15] <= in_flop[14] ^ (in_flop[15] ^ in);
                     end
-                    
                     if(data_done) begin
                         state <= STANDBY; //return to standby at the end of the data
                     end

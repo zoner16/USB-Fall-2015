@@ -10,6 +10,8 @@
 `define K   2'b01 
 `define SE0 2'b00 
 
+`define SYNC 8'b10000000
+
 `define CRC5  16'h001F
 `define CRC16 16'hFFFF
 `define NONE  16'h0000
@@ -24,12 +26,6 @@ typedef struct packed {
   logic [63:0] data;
 } pkt_t;
 
-/*
-interface usbWires;
-	tri0 DP;
-	tri0 DM;
-endinterface
-*/
 // Write your usb host here.  Do not modify the port list.
 
 module usbHost
@@ -38,8 +34,10 @@ module usbHost
 
     /* Tasks needed to be finished to run testbenches */
     
-    logic encode, decode, kill, error, in_done, out_done, NRZI_in_active, NRZI_out_active;
+    logic encode, decode, kill, error, in_done, out_done, NRZI_in_active, NRZI_out_active, read, write, isValueReadCorrect, read_write_FSM_done;
     logic [1:0] port, port_in, port_out;
+    bit [15:0] FSMmempage;
+    bit [63:0] data_to_OS;
     pkt_t pkt_in, pkt_out;
 
     task prelabRequest();
@@ -109,11 +107,11 @@ module usbHost
                             .done(in_done), 
                             .NRZI_active(NRZI_in_active),
                             .error(error));
+    
 
     //assign wires to port pins
     assign wires.DP = (NRZI_out_active) ? port_out[1] : 1'bz;
     assign wires.DM = (NRZI_out_active) ? port_out[0] : 1'bz;
 
 endmodule: usbHost
-
 

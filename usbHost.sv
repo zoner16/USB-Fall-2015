@@ -384,7 +384,7 @@ module protocolFSM
                         state <= Hold;
                         failure <= 1;
                     end
-                    else if (pkt_received && pkt_in.pid == 4'b1010) begin
+                    else if (pkt_received && (pkt_in.pid == 4'b1010)) begin
                         // received nak so resend data
                         state <= OutTransDataWait;
                         pkt_out.pid <= 4'b0011;
@@ -394,7 +394,7 @@ module protocolFSM
                         corrupted_count <= corrupted_count + 1'd1;
 
                     end
-                    else if (pkt_received && pkt_in.pid == 4'b0010) begin //received ack
+                    else if (pkt_received && (pkt_in.pid == 4'b0010)) begin //received ack
                         state <= Hold;
                         success <= 1;
                     end
@@ -761,6 +761,7 @@ module bitStuff(clk, rst_L, in, data_begin, CRC_done, out, stuff_done, halt_stre
             case(state) 
                 STANDBY: begin //waiting for data
                     delay_flag <= 0; //reset delayed done flag
+                    count <= 0;
                     if(data_begin) begin
                         state <= SEND;
                     end
@@ -769,9 +770,7 @@ module bitStuff(clk, rst_L, in, data_begin, CRC_done, out, stuff_done, halt_stre
                     if(count == 5 && in == 1) begin //head to stuff if six 1s
                         state <= STUFF; 
                         halt_stream <= 1; //halt stream to stuff
-                        count <= 0; //reset count
                         if(CRC_done)begin
-                            delay_flag <= 1; //set delay flag if CRC is also done
                         end                        
                     end
                     else if(CRC_done) begin //return to STANDBY if CRC is done
@@ -786,10 +785,11 @@ module bitStuff(clk, rst_L, in, data_begin, CRC_done, out, stuff_done, halt_stre
                     end
                 end
                 STUFF: begin //stream is being STUFFED
-                    delay_flag <= 0; //reset delay flag
+                    count <= 0;
                     halt_stream <= 0; //reset halt signal
-                    if(CRC_done | delay_flag) begin
+                    if(CRC_done) begin
                         state <= STANDBY; //head back to STANDBY if CRC is done
+                        delay_flag <= 1;
                     end
                     else begin
                         state <= SEND; //head back to SEND otherwise
@@ -800,7 +800,7 @@ module bitStuff(clk, rst_L, in, data_begin, CRC_done, out, stuff_done, halt_stre
     end
 
     always_comb begin
-        if(CRC_done && !(count == 5 && in)) begin
+        if(CRC_done && (state != STUFF)) begin
             stuff_done = 1; //indicate stuff is done if CRC is done and no stuffing
         end
         else if(delay_flag) begin
@@ -930,6 +930,7 @@ module dataStream_in (clk, rst_L, kill, decode, port, pkt_out, done, NRZI_active
                  .kill(kill),
                  .decode(decode), 
                  .stream_done(stream_done),
+                 .halt_stream(halt_stream),
                  .in(port), 
                  .out(NRZI_out), 
                  .EOP_error(EOP_error),
@@ -986,8 +987,8 @@ endmodule: dataStream_in
 // EOP_error        (output)- Error in recieving EOP
 // NRZI_active      (output)- Activity flag controlling port lines
 */
-module NRZI_in (clk, rst_L, kill, decode, stream_done, in, out, EOP_error, NRZI_active, NRZI_done);
-    input logic clk, rst_L, kill, decode, stream_done;
+module NRZI_in (clk, rst_L, kill, decode, stream_done, halt_stream, in, out, EOP_error, NRZI_active, NRZI_done);
+    input logic clk, rst_L, kill, decode, stream_done, halt_stream;
     input logic [1:0] in;
     output logic EOP_error, out, NRZI_active, NRZI_done;
     
@@ -1020,15 +1021,17 @@ module NRZI_in (clk, rst_L, kill, decode, stream_done, in, out, EOP_error, NRZI_
                     prev <= in; //reset previous state
                     if(stream_done) begin //watch for EOP
                         state <= EOP;
-                        EOP_count <= 2'd1;
-                        if(in != `SE0) begin
-                            EOP_error <= 1;
+                        if(~halt_stream)begin
+                            EOP_count <= 2'd1;
+                            if(in != `SE0) begin
+                                EOP_error <= 1;
+                            end
                         end
                     end
                 end
                 EOP: begin //EOP confirmation
-                    if(EOP_count == 1 && in == `SE0) begin
-                        EOP_count <= 2'd2;
+                    if(EOP_count != 2 && in == `SE0) begin
+                        EOP_count <= EOP_count + 1'b1;
                     end
                     else if(EOP_count == 2 && in == `J) begin
                         EOP_count <= 2'd0;

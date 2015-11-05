@@ -1,24 +1,30 @@
 //`default_nettype none
 
+/*Packet PIDs*/
 `define OUT   4'b0001
 `define IN    4'b1001
 `define DATA0 4'b0011
 `define ACK   4'b0010
 `define NAK   4'b1010
 
+/*Port States*/
 `define J   2'b10 
 `define K   2'b01 
 `define SE0 2'b00 
 
+/*SYNC Definition*/
 `define SYNC 8'b10000000
 
+/*CRC Types*/
 `define CRC5  16'h001F
 `define CRC16 16'hFFFF
 `define NONE  16'h0000
 
+/*Residue Definitions*/
 `define CRC5_residue  16'h000C
 `define CRC16_residue 16'h800D
 
+/*Packet Structure*/
 typedef struct packed {
   logic [3:0] pid;
   logic [3:0] endp;
@@ -28,12 +34,20 @@ typedef struct packed {
 
 // Write your usb host here.  Do not modify the port list.
 
+/******************************************************************************
+// usbHost
+//*****************************************************************************
+// clk              (input) - The clock
+// rst_L            (input) - Reset (asserted low)
+// wires            (input) - Port wires input
+*/
 module usbHost
     (input logic clk, rst_L,
      usbWires wires);
 
     /* Tasks needed to be finished to run testbenches */
     
+    //Connection variables
     logic encode, decode, kill, error, in_done, out_done, NRZI_in_active, NRZI_out_active, failure, protocol_success;
     logic isValueReadCorrect, read_done, write_done, in_trans, out_trans;
     logic [1:0] port_in, port_out;
@@ -155,18 +169,39 @@ module usbHost
     //assign wires to port pins
     assign wires.DP = (NRZI_out_active) ? port_out[1] : 1'bz;
     assign wires.DM = (NRZI_out_active) ? port_out[0] : 1'bz;
-
+    
     assign port_in[0] = (NRZI_in_active) ? wires.DM : 1'bz;
     assign port_in[1] = (NRZI_in_active) ? wires.DP : 1'bz;
 
 endmodule: usbHost
 
+/******************************************************************************
+// readWriteFSM
+//*****************************************************************************
+// clk                  (input) - The clock
+// rst_L                (input) - Reset (asserted low)
+// read                 (input) - Signal for a read transaction
+// write                (input) - Signal for a read transaction
+// failure              (input) - Signal that transaction failed
+// success              (input) - Signal that transaction succeeded
+// FSMmempage           (input) - Address of memory page to read/write to
+// data_from_OS         (input) - Data to be written from OS
+// data_from_device     (input) - Data read from device
+// data_to_device       (output)- Data to be written from device
+// data_to_OS           (output)- Data read to OS
+// endp                 (output)- Endp for packet construction
+// in_trans             (output)- Signal to perform an in transaction
+// out_trans            (output)- Signal to perform an out transaction
+// isValueReadCorrect   (output)- Operation success flag
+// read_done            (output)- Signal that read operation finished
+// write_done           (output)- Signal that write operation finished
+*/
 module readWriteFSM
   (input bit         clk, rst_b, read, write, failure, success,
    input bit [15:0]  FSMmempage,
    input bit [63:0]  data_from_OS, data_from_device,
    output bit [63:0] data_to_device, data_to_OS,
-   output bit [3:0] endp,
+   output bit [3:0]  endp,
    output bit        in_trans, out_trans, isValueReadCorrect, read_done, write_done);
    
     enum logic [1:0] {Hold = 2'b00, Out = 2'b01, ReadIn = 2'b10, WriteOut = 2'b11} state;
@@ -260,14 +295,35 @@ module readWriteFSM
 
 endmodule: readWriteFSM
 
+/******************************************************************************
+// protocolFSM
+//*****************************************************************************
+// clk              (input) - The clock
+// rst_L            (input) - Reset (asserted low)
+// in_trans         (input) - Signal to perform an in transaction
+// out_trans        (input) - Signal to perform an out transaction
+// pkt_sent         (input) - Signal that packet has been sent by datastream_out
+// pkt_received     (input) - Signal that packet has been received by datastream_in
+// error            (input) - Address of memory page to read/write to
+// endp             (input) - Endp for packet construction
+// data_from_host   (input) - Data taken from the read/write fsm
+// pkt_in           (input) - Packet in from device
+// failure          (output)- Signal that transaction failed
+// success          (output)- Signal that transaction succeeded
+// kill             (output)- Soft reset for datastream in when timeout
+// encode           (output)- Signal to datastream_out to start sending
+// decode           (output)- Signal to datastream_in to start reading
+// data_to_host     (output)- Data sent back to read/write fsm
+// pkt_out          (output)- Packet out to device
+*/
 module protocolFSM
-  (input bit         clk, rst_b, in_trans, out_trans, pkt_sent, pkt_received, error,
-   input pkt_t       pkt_in,
-   input bit [63:0]  data_from_host,
+  (input bit         clk, rst_b, in_trans, out_trans, pkt_sent, pkt_received, error,   
    input bit [3:0]   endp,
+   input bit [63:0]  data_from_host,
+   input pkt_t       pkt_in,
    output bit 	     failure, success, kill, encode, decode,
-   output pkt_t      pkt_out,
-   output bit [63:0] data_to_host);
+   output bit [63:0] data_to_host
+   output pkt_t      pkt_out,);
 
    logic            wait_ack;
    logic [7:0] 	    clk_count;
@@ -789,7 +845,7 @@ module bitStuff(clk, rst_L, in, data_begin, CRC_done, out, stuff_done, halt_stre
                     halt_stream <= 0; //reset halt signal
                     if(CRC_done) begin
                         state <= STANDBY; //head back to STANDBY if CRC is done
-                        delay_flag <= 1;
+                        delay_flag <= 1; //set delay flag for stuff done 
                     end
                     else begin
                         state <= SEND; //head back to SEND otherwise
@@ -801,7 +857,7 @@ module bitStuff(clk, rst_L, in, data_begin, CRC_done, out, stuff_done, halt_stre
 
     always_comb begin
         if(CRC_done && (state != STUFF)) begin
-            stuff_done = 1; //indicate stuff is done if CRC is done and no stuffing
+            stuff_done = 1; //indicate stuff is done if no need to stuff
         end
         else if(delay_flag) begin
             stuff_done = 1; //indicate stuff is done on delayed flag
@@ -847,7 +903,7 @@ module NRZI(clk, rst_L, in, out, encode, NRZI_active, NRZI_done, stuff_done, jum
         else begin
             case(state)
                 STANDBY: begin //waiting for encode signal
-                    prev <= `J;
+                    prev <= `J; //reset previous 
                     NRZI_done <= 0; //reset done flag
                     if(encode) begin
                         state <= SEND;
@@ -982,10 +1038,13 @@ endmodule: dataStream_in
 // rst_L            (input) - Reset (asserted low)
 // kill             (input) - Kill switch for timeouts
 // decode           (input) - Start command to decode NRZI signals
+// stream_done      (input) - Signal that the stream has finished and EOP should be on the line
+// halt_stream      (input) - Signal that the unstuffer has halted the downstream
 // in               (input) - Input from USB ports
 // out              (output)- Datastream out
 // EOP_error        (output)- Error in recieving EOP
 // NRZI_active      (output)- Activity flag controlling port lines
+// NRZI_done        (output)- Signal that the datastream_in is done
 */
 module NRZI_in (clk, rst_L, kill, decode, stream_done, halt_stream, in, out, EOP_error, NRZI_active, NRZI_done);
     input logic clk, rst_L, kill, decode, stream_done, halt_stream;
@@ -1009,9 +1068,9 @@ module NRZI_in (clk, rst_L, kill, decode, stream_done, halt_stream, in, out, EOP
         else begin
             case(state)
                 STANDBY: begin //standing by for decoding signal
-                    prev <= `J;
-                    EOP_error <= 0;
-                    NRZI_done <= 0;
+                    prev <= `J; //reset previous
+                    EOP_error <= 0; //reset error flag
+                    NRZI_done <= 0; //reset done flag
                     if(decode) begin
                         state <= SEND;
                         NRZI_active <= 1; //NRZI activated
@@ -1021,8 +1080,8 @@ module NRZI_in (clk, rst_L, kill, decode, stream_done, halt_stream, in, out, EOP
                     prev <= in; //reset previous state
                     if(stream_done) begin //watch for EOP
                         state <= EOP;
-                        if(~halt_stream)begin
-                            EOP_count <= 2'd1;
+                        if(~halt_stream)begin //don't flag errors or search for EOP if stream was halted
+                            EOP_count <= 2'd1; 
                             if(in != `SE0) begin
                                 EOP_error <= 1;
                             end
@@ -1031,13 +1090,13 @@ module NRZI_in (clk, rst_L, kill, decode, stream_done, halt_stream, in, out, EOP
                 end
                 EOP: begin //EOP confirmation
                     if(EOP_count != 2 && in == `SE0) begin
-                        EOP_count <= EOP_count + 1'b1;
+                        EOP_count <= EOP_count + 1'b1; //increment EOP count
                     end
                     else if(EOP_count == 2 && in == `J) begin
-                        EOP_count <= 2'd0;
+                        EOP_count <= 2'd0; //reset EOP count
                         state <= STANDBY;
-                        NRZI_done <= 1;
-                        NRZI_active <= 0;
+                        NRZI_done <= 1; //signal done
+                        NRZI_active <= 0; //NRZI deactivated
                     end
                     else begin
                         EOP_error <= 1; //flag incorrect EOP
@@ -1053,7 +1112,7 @@ module NRZI_in (clk, rst_L, kill, decode, stream_done, halt_stream, in, out, EOP
     
 
     always_comb begin
-        if(state == SEND)begin
+        if(state == SEND)begin //output logic
             if(in == `K) begin
                 out = (prev == `J) ? 1'b0 : 1'b1;
             end
@@ -1143,6 +1202,7 @@ endmodule: bitUnstuff
 // data_done        (input) - Signal from the packer that the stuffed data is done
 // CRC_type         (input) - CRC type determined by packer upon recieving PID
 // out              (output)- Datastream out
+// CRC_error        (output)- Indicates that the CRC residue is off
 */
 module CRC_in (clk, rst_L, kill, in, data_begin, halt_stream, data_done, CRC_type, out, CRC_error);
     input logic clk, rst_L, kill, in, data_begin, halt_stream, data_done; 
@@ -1221,7 +1281,10 @@ endmodule: CRC_in
 // decode           (input) - Start command to decode NRZI signals
 // in               (input) - Input from datastream
 // halt_stream      (input) - Signal from unstuffer to stop for unstuff
-// error            (output)- Error flag for CRC or EOP errors
+// EOP_error        (input) - Flag from NRZI that the EOP was missed
+// NRZI_done        (input) - Flag from NRZI that it has finished
+// CRC_error        (input) - Flag from CRC that residue was off
+// error            (output)- Error flag to protocol fsm
 // data_begin       (output)- Signal to upstream modules that data is beginning
 // data_done        (output)- Signal to upstream modules that data is done
 // stream_done      (output)- Done indicating that packet is ready
@@ -1338,10 +1401,10 @@ module dataPack (clk, rst_L, kill, decode, in, halt_stream, EOP_error, NRZI_done
                     else if(pid[3:0] != ~pid[7:4])begin //throw error if PID and NPID aren't complements
                         error <= 1;
                     end
-                    else if(CRC_error) begin
+                    else if(CRC_error) begin //throw errors for CRC mismatch
                         error <= 1;
                     end
-                    if(NRZI_done) begin
+                    if(NRZI_done) begin 
                         state <= STANDBY; //return to standby
                     end
                 end
@@ -1350,7 +1413,7 @@ module dataPack (clk, rst_L, kill, decode, in, halt_stream, EOP_error, NRZI_done
     end
     
     always_comb begin
-        case(pid[3:0])
+        case(pid[3:0]) //set parameters based on PID
             `OUT: begin
                 CRC_type = `CRC5;
                 size = 8'd11;

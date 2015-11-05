@@ -9,14 +9,8 @@ module protocolFSM
   (input bit         clk, rst_b, in_trans, out_trans, pkt_sent, pkt_received, crc_correct,
    input pkt_t       pkt_in,
    input bit [63:0]  data_from_host,
-<<<<<<< HEAD
-   output bit 	     failure, success, kill,
-   output 	     pkt_t pkt_out,
-=======
    output bit 	     failure, success, kill, encode, decode,
    output pkt_t      pkt_out,
-   output bit [4:0]  crc_type,
->>>>>>> dcc8045820088459b56c6beb596f9c04ef22c38e
    output bit [63:0] data_to_host);
 
    logic [7:0] 	    clk_count;
@@ -48,28 +42,17 @@ module protocolFSM
                         pkt_out.pid <= 4'b1001;
                         pkt_out.addr <= 7'd5;
                         pkt_out.endp <= 4'd4;
-<<<<<<< HEAD
 		        encode <= 1;
 		        kill <= 1;
-=======
-                        crc_type <= 5'd5;
-                        encode <= 1;
-                        kill <= 1;
->>>>>>> dcc8045820088459b56c6beb596f9c04ef22c38e
+
                         state <= InTransWait;
                     end
                     else if (out_trans) begin
                         pkt_out.pid <= 4'b0001;
                         pkt_out.addr <= 7'd5;
                         pkt_out.endp <= 4'd4;
-<<<<<<< HEAD
 		        encode <= 1;
 		        kill <= 1;
-=======
-                        crc_type <= 5'd5;
-                        encode <= 1;
-                        kill <= 1;
->>>>>>> dcc8045820088459b56c6beb596f9c04ef22c38e
                         state <= OutTransWait;
                     end
                 end // case: Hold
@@ -118,7 +101,6 @@ module protocolFSM
                         clk_count <= clk_count + 1'd1; //keep track of clk cycles
                     end
                 end // case: InTrans
-<<<<<<< HEAD
 	        OutTransWait: begin //wait for datastream to confirm out pkt sent
 		   encode <= 0;
 		   kill <= 0;
@@ -130,20 +112,6 @@ module protocolFSM
 		      kill <= 1;
 		   end
 		end
-=======
-                OutTransWait: begin //wait for datastream to confirm out pkt sent
-                    encode <= 0;
-                    kill <= 0;
-                    if (pkt_sent) begin
-                        state <= OutTransDataWait;
-                        pkt_out.pid <= 4'b0011; //send data
-                        pkt_out.data <= data_from_host;
-                        crc_type = 5'd16;
-                        encode <= 1;
-                        kill <= 1;
-                    end
-                end
->>>>>>> dcc8045820088459b56c6beb596f9c04ef22c38e
                 OutTransDataWait: begin //wait for datastream to confirm data pkt sent
                     clk_count <= 0;
                     encode <= 0;
@@ -165,22 +133,13 @@ module protocolFSM
                     end
                     else if (pkt_received && pkt_in.pid == 4'b1010) begin
                          // received nak so resend data
-<<<<<<< HEAD
 		       state <= OutTransDataWait;
 		       pkt_out.pid <= 4'b0011;
                        pkt_out.data <= data_from_host;
 		       encode <= 1;
 		       kill <= 1;
                        corrupted_count <= corrupted_count + 1'd1;
-=======
-                        state <= OutTransDataWait;
-                        pkt_out.pid <= 4'b0011;
-                        pkt_out.data <= data_from_host;
-                        crc_type = 5'd16;
-                        encode <= 1;
-                        kill <= 1;
-                        corrupted_count <= corrupted_count + 1'd1;
->>>>>>> dcc8045820088459b56c6beb596f9c04ef22c38e
+
                     end
                     else if (pkt_received && pkt_in.pid == 4'b0010) begin //received ack
                         state <= Hold;
@@ -191,14 +150,8 @@ module protocolFSM
                         state <= OutTransDataWait;
                         pkt_out.pid <= 4'b0011;
                         pkt_out.data <= data_from_host;
-<<<<<<< HEAD
 		        encode <= 1;
 		        kill <= 1;
-=======
-                        crc_type = 5'd16;
-                        encode <= 1;
-                        kill <= 1;
->>>>>>> dcc8045820088459b56c6beb596f9c04ef22c38e
                     end
                     else begin
                         clk_count <= clk_count + 1'd1; //keep track of clk cycles

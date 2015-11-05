@@ -33,7 +33,6 @@ module readWriteFSM
                     in_trans <= 0;
                     out_trans <= 0;
                     if (read || write) begin
-<<<<<<< HEAD
                        state <= Out;
 		       out_trans <= 1;
                        data_to_device[15:0] <= FSMmempage;
@@ -41,15 +40,7 @@ module readWriteFSM
                 end
                 Out: begin // out transaction occurs for both read and write
 		    out_trans <= 0;
-=======
-                        state <= Out;
-                        out_trans <= 1;
-                        data_to_device <= {48'd0, FSMmempage};
-                    end
-                end
-                Out: begin // out trans then in
-                out_trans <= 0;
->>>>>>> dcc8045820088459b56c6beb596f9c04ef22c38e
+
                     if (success) begin
                         if (read) begin
                             state <= ReadIn;
@@ -69,10 +60,6 @@ module readWriteFSM
                 end
                 ReadIn: begin
                     in_trans <= 0;
-<<<<<<< HEAD
-=======
-                    data_to_OS <= data_from_device;
->>>>>>> dcc8045820088459b56c6beb596f9c04ef22c38e
                     if (success) begin
                         state <= Hold;
                         read_write_FSM_done <= 1;

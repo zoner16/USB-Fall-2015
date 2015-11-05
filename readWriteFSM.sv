@@ -10,11 +10,13 @@ module readWriteFSM
    
     always_ff @(posedge clk, negedge rst_b) begin
         if (~rst_b) begin
-            state <= Hold;
-            isValueReadCorrect <= 0;
-            read_write_FSM_done <= 0;
-            in_trans <= 0;
-            out_trans <= 0;
+            state = Hold;
+            isValueReadCorrect = 0;
+            read_write_FSM_done = 0;
+	    data_to_device = 0;
+            in_trans = 0;
+            out_trans = 0;
+	    data_to_OS = 0;
         end
         else begin
             case(state)
@@ -26,10 +28,10 @@ module readWriteFSM
                     if (read || write) begin
                        state <= Out;
 		       out_trans <= 1;
-                       data_to_device <= {48'd0, FSMmempage};
+                       data_to_device[15:0] <= FSMmempage;
                     end
                 end
-                Out: begin // out trans then in
+                Out: begin // out transaction occurs for both read and write
 		    out_trans <= 0;
                     if (success) begin
 		       if (read) begin
@@ -50,12 +52,11 @@ module readWriteFSM
                 end
                 ReadIn: begin
                     in_trans <= 0;
-		    data_to_OS <= data_from_device;
                     if (success) begin
                         state <= Hold;
                         read_write_FSM_done <= 1;
                         isValueReadCorrect <= 1;
-		        
+		        data_to_OS <= data_from_device;
                     end
                     else if (failure) begin
                         state <= Hold;

@@ -1,0 +1,42 @@
+{
+    "Modules": {
+        "...MASTER...": {},
+        "std": {},
+        "readWriteFSM": {
+            "Compiled": "Yes",
+            "Compiled Times": 2
+        }
+    },
+    "CompUnits": {
+        "amcQw_d": {
+            "mod": "...MASTER...",
+            "archive": "archive.1/_2386319_archive_1.a",
+            "mode": 4,
+            "out": "amcQw_d.o",
+            "bytes": 8424
+        },
+        "gGuhv_d": {
+            "mod": "readWriteFSM",
+            "archive": "archive.1/_2386319_archive_1.a",
+            "mode": 4,
+            "out": "gGuhv_d.o",
+            "bytes": 12422
+        }
+    },
+    "ObjArchives": [
+        {
+            "objects": [
+                [
+                    "amcQw_d.o",
+                    8424
+                ],
+                [
+                    "gGuhv_d.o",
+                    12422
+                ]
+            ],
+            "archive": "archive.1/_2386319_archive_1.a",
+            "size": 20846
+        }
+    ]
+}

@@ -4,7 +4,6 @@ module protocolFSM
    input bit [63:0]  data_from_host,
    output bit 	     failure, success, kill,
    output 	     pkt_t pkt_out,
-   output bit [4:0]  crc_type,
    output bit [63:0] data_to_host);
 
    logic [7:0] 	    clk_count;
@@ -37,7 +36,6 @@ module protocolFSM
                         pkt_out.pid <= 4'b1001;
                         pkt_out.addr <= 7'd5;
                         pkt_out.endp <= 4'd4;
-                        crc_type <= 5'd5;
 		        encode <= 1;
 		        kill <= 1;
                         state <= InTransWait;
@@ -46,7 +44,6 @@ module protocolFSM
                         pkt_out.pid <= 4'b0001;
                         pkt_out.addr <= 7'd5;
                         pkt_out.endp <= 4'd4;
-                        crc_type <= 5'd5;
 		        encode <= 1;
 		        kill <= 1;
                         state <= OutTransWait;
@@ -71,14 +68,14 @@ module protocolFSM
                         state <= Hold;
                         failure <= 1;
                     end
-                    else if (pkt_received && ~crc_correct) begin // corrupted data sent back
+                    else if (pkt_received && ~crc_correct) begin // corrupted data sent to pFSM
                         corrupted_count <= corrupted_count + 1;
                         pkt_out.pid <= 4'b1010; //send nak
 		        encode <= 1;
 		        kill <= 1;
 		        state <= InTransWait;
                     end
-                    else if (pkt_received && crc_correct) begin //correct data sent back
+                    else if (pkt_received && crc_correct) begin //correct data sent to pFSM
                         state <= Hold;
                         success <= 1;
                         pkt_out.pid <= 4'b0010; //send ack
@@ -104,7 +101,6 @@ module protocolFSM
 		      state <= OutTransDataWait;
 		      pkt_out.pid <= 4'b0011; //send data
                       pkt_out.data <= data_from_host;
-                      crc_type = 5'd16;
 		      encode <= 1;
 		      kill <= 1;
 		   end
@@ -133,7 +129,6 @@ module protocolFSM
 		       state <= OutTransDataWait;
 		       pkt_out.pid <= 4'b0011;
                        pkt_out.data <= data_from_host;
-                       crc_type = 5'd16;
 		       encode <= 1;
 		       kill <= 1;
                        corrupted_count <= corrupted_count + 1'd1;
@@ -147,7 +142,6 @@ module protocolFSM
 		        state <= OutTransDataWait;
 		        pkt_out.pid <= 4'b0011;
                         pkt_out.data <= data_from_host;
-                        crc_type = 5'd16;
 		        encode <= 1;
 		        kill <= 1;
                     end
